@@ -74,22 +74,18 @@ def test_update_testbed_metadata(duthosts, tbinfo):
         logger.warning('Unable to create file {}: {}'.format(filepath, e))
 
 
-def test_disable_rsyslog_rate_limit(duthosts, enum_dut_hostname):
-    duthost = duthosts[enum_dut_hostname]
-    features_dict, succeed = duthost.get_feature_status()
-    if not succeed:
-        # Something unexpected happened.
-        # We don't want to fail here because it's an util
-        logging.warn("Failed to retrieve feature status")
-        return
+def test_disable_rsyslog_rate_limit(duthosts, enum_frontend_dut_hostname):
+    duthost = duthosts[enum_frontend_dut_hostname]
+    running_dockers = duthost.command("docker ps --format \{\{.Names\}\}")['stdout_lines']
     cmd_disable_rate_limit = r"docker exec -i {} sed -i 's/^\$SystemLogRateLimit/#\$SystemLogRateLimit/g' /etc/rsyslog.conf"
     cmd_reload = r"docker exec -i {} supervisorctl restart rsyslogd"
-    for feature_name, state in features_dict.items():
-        if 'enabled' not in state:
+    for docker_name in running_dockers:
+        if duthost.get_facts()['num_asic'] > 1 and docker_name == "database":
+            # On linecards, rsyslogd status on global database is not 'RUNNING' and thus it fails
             continue
         cmds = []
-        cmds.append(cmd_disable_rate_limit.format(feature_name))
-        cmds.append(cmd_reload.format(feature_name))
+        cmds.append(cmd_disable_rate_limit.format(docker_name))
+        cmds.append(cmd_reload.format(docker_name))
         duthost.shell_cmds(cmds=cmds)
 
 def collect_dut_lossless_prio(dut):
